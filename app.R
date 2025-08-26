@@ -18,6 +18,7 @@ library("ggplot2")
 library("plotly")
 library("GWalkR")
 library("TSstudio")
+library("xts")
 library("plotrix")
 
 DATA <- read.csv("https://raw.githubusercontent.com/aszilagyi1989/Shiny_CSV/refs/heads/main/OSAP1222_Jarmu.csv", sep = ";", row.names = NULL)
@@ -164,9 +165,11 @@ server <- function(input, output, session) {
       
     }else if(input$navset != "Tableau" && (input$diagram == "Idősor" || input$diagram == "Dekompozíciós modell")){
       
+      DATA %>% filter(DATE >= input$date[[1]] & DATE <= input$date[[2]] & MG64 %in% input$search & MG05 %in% input$bordercity) -> DATA
+      View(DATA)
       DATA %>% select(-c("MG05", "MG64", "MG60")) -> DATA
-      DATA %>% pivot_wider(names_from = "MG58", values_from = "GADF201") -> DATA
-      DATA %>% select(-c("DATE"))
+      DATA %>% group_by(MG58, DATE) %>% summarise(GADF201 = sum(GADF201)) -> DATA
+      DATA %>% pivot_wider(names_from = "MG58", values_from = "GADF201")
       
     }else if(input$navset == "Tableau"){
       
@@ -228,17 +231,19 @@ server <- function(input, output, session) {
           
         }else if (input$diagram == "Idősor"){
           
-          subsetted <- ts(subsetted, start = c(str_sub(input$date[[1]], 1, 4), str_sub(input$date[[1]], 6, 7)), end = c(str_sub(input$date[[2]], 1, 4), str_sub(input$date[[2]], 6, 7)), frequency = 12)
+          subsetted <- xts(subsetted[, c("Belépő", "Kilépő")], order.by = subsetted$DATE)
+          # subsetted <- ts(subsetted, start = c(str_sub(input$date[[1]], 1, 4), str_sub(input$date[[1]], 6, 7)), end = c(str_sub(input$date[[2]], 1, 4), str_sub(input$date[[2]], 6, 7)), frequency = 12)
           map <- ts_plot(subsetted[, c("Belépő", "Kilépő")], title = "Idősor", Ytitle = "Forgalom", Xtitle = "Dátum")
           map
           
         }else if (input$diagram == "Dekompozíciós modell"){
           
-          subsetted <- ts(subsetted, start = c(str_sub(input$date[[1]], 1, 4), str_sub(input$date[[1]], 6, 7)), end = c(str_sub(input$date[[2]], 1, 4), str_sub(input$date[[2]], 6, 7)), frequency = 12)
+          subsetted <- xts(subsetted[, c("Belépő", "Kilépő")], order.by = subsetted$DATE)
+          # subsetted <- ts(subsetted, start = c(str_sub(input$date[[1]], 1, 4), str_sub(input$date[[1]], 6, 7)), end = c(str_sub(input$date[[2]], 1, 4), str_sub(input$date[[2]], 6, 7)), frequency = 12)
           if (input$forgalom == "Belépő")
-            map <- ts_decompose(subsetted[, "Belépő"])
+            map <- ts_decompose(ts(subsetted[, "Belépő"], frequency = 12))
           else
-            map <- ts_decompose(subsetted[, "Kilépő"])
+            map <- ts_decompose(ts(subsetted[, "Kilépő"], frequency = 12))
           map
           
         }
@@ -248,7 +253,7 @@ server <- function(input, output, session) {
         
         showModal(modalDialog(
           title = "Figyelmeztetés!",
-          "A kiválasztott időszak kezdő időpontja nem lehet nagyobb, mint a záróidőpont, vagy az adott időszakra még nincs adat, vagy csak egyelemű idősor!",
+          "A kiválasztott időszak kezdő időpontja nem lehet nagyobb, mint a záróidőpont, vagy az adott időszakra még nincs adat, vagy csak egyelemű az idősor, vagy az idősori dekompozíció esetén meg kell lennie a két teljes évnek!",
           footer = modalButton("Rendben"),
           fade = TRUE
         ))
